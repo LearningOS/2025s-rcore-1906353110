@@ -9,6 +9,8 @@ pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     /// The task context
     pub task_cx: TaskContext,
+    /// The syscall count
+    pub count: [u8;5],
 }
 
 /// The status of a task
@@ -23,3 +25,5 @@ pub enum TaskStatus {
     /// exited
     Exited,
 }
+
+

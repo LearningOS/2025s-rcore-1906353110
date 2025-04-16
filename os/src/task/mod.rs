@@ -54,6 +54,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            count : [0;5],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -168,4 +169,44 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+/// add syscall count
+pub fn add_syscall_count(syscall_id:usize){
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    match syscall_id {
+        64 => inner.tasks[current].count[0] += 1,
+        93 => inner.tasks[current].count[1] += 1,
+        124 => inner.tasks[current].count[2] += 1,
+        169 => inner.tasks[current].count[3] += 1,
+        410 => inner.tasks[current].count[4] += 1,
+        _ => panic!("Unsupported syscall_id: {}", syscall_id),
+    }
+
+
+
+}
+/// get count
+pub fn get_syscall_count(syscall_id:usize)->isize{
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    match syscall_id {
+        64 => {
+            inner.tasks[current].count[0] as isize
+        },
+        93 => {
+            inner.tasks[current].count[1] as isize
+        },
+        124 => {
+            inner.tasks[current].count[2] as isize        },
+        169 => {
+            inner.tasks[current].count[3] as isize
+        },
+        410 => {
+            inner.tasks[current].count[4] as isize
+        },
+        _ => panic!("Unsupported syscall_id: {}", syscall_id),
+    }
+
+
 }

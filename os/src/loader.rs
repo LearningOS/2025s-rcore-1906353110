@@ -60,6 +60,10 @@ pub fn get_num_app() -> usize {
     }
     unsafe { (_num_app as usize as *const usize).read_volatile() }
 }
+// *address is a app numbers
+
+
+
 
 /// Load nth user app at
 /// [APP_BASE_ADDRESS + n * APP_SIZE_LIMIT, APP_BASE_ADDRESS + (n+1) * APP_SIZE_LIMIT).
