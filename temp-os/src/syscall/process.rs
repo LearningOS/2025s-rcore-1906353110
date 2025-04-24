@@ -31,9 +31,6 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     let us = get_time_us();
     println!("{}",us);
     println!("ts:{:?}",_ts);
-
-    //思路1 先找到物理，然后写
-    //思路2 看一下哪个traslated_byte_buffer 深刻理解一下
     0
     // unsafe {
     //     *_ts = TimeVal {
