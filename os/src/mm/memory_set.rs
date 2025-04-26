@@ -270,29 +270,33 @@ impl MemorySet {
         match map_area.my_map(&mut self.page_table){
             0 => {
                 self.areas.push(map_area);
+                debug!("cheng gong one ===============");
                 0
             },
             _ => -1
         }
     }
-    /// 等会 改掉这个
-    pub  fn my_map(&mut self,start:usize,len:usize,prot:usize)->isize{
-        0
+    pub fn my_map(&mut self,start:usize,len:usize,prot:usize)->isize{
+        let va:VirtAddr=start.into();
+        if!va.aligned()||prot&!0x7!=0||prot&0x7==0{
+            return -1;
+        }
+        let end:VirtAddr=(start + len).into();
+        let ma=MapArea::new(va,end,Framed,Self::prot_to_permission(prot));
+
+
+        // let vpn_start:VirtPageNum = va.floor();
+        // let vpn_end:VirtPageNum = end.floor();
+        for area in self.areas.iter_mut(){
+            let s=area.vpn_range.get_start();
+            let e = area.vpn_range.get_end();
+            if s!=e && !(s>=ma.vpn_range.get_end()|| e<=ma.vpn_range.get_start()) {
+                debug!("qujian budui {:x}",start);
+                return  -1;
+            }
+        }
+        self.my_push(ma)
     }
-    // pub fn my_map(&mut self,start:usize,len:usize,prot:usize)->isize{
-    //     let va:VirtAddr=start.into();
-    //     if!va.aligned()||prot&!0x7!=0||prot&0x7==0{return -1;}
-    //     let end:VirtAddr=(start + len).into();
-    //     let ma=MapArea::new(va,end,Framed,Self::prot_to_permission(prot));
-    //     // let vpn_start:VirtPageNum = va.floor();
-    //     // let vpn_end:VirtPageNum = end.floor();
-    //     for area in self.areas{
-    //         if !(area.vpn_range.get_start()>ma.vpn_range.get_end()||area.vpn_range.get_end()<ma.vpn_range.get_start()){
-    //             return  -1;
-    //         }
-    //     }
-    //     self.my_push(ma)
-    // }
     pub fn prot_to_permission(prot: usize) -> MapPermission {
         let mut permissions = MapPermission::empty();
         if prot & 1 == 1 {
@@ -304,11 +308,34 @@ impl MemorySet {
         if prot & (1 << 2) == (1 << 2) {
             permissions |= MapPermission::X;
         }
-        permissions
+        permissions | MapPermission::U
     }
 
-    pub fn my_shrink(){
+    pub fn my_shrink_to(&mut self, start: VirtAddr, end: VirtAddr) -> isize {
+        debug!("start:{:?},end:{:?}",start,end);
+        debug!("start.floor:{:?},end.ceil:{:?},end.floor{:?}",start.floor(),end.ceil(),end.floor());
 
+        if!start.aligned(){
+            debug!("aligned start:{:?},end:{:?}",start,end);
+            return -1;
+        }
+        if let Some(area) = self
+            .areas
+            .iter_mut()
+            .find(|area| area.vpn_range.get_start()<=start.floor() && area.vpn_range.get_end()>=end.ceil() )
+        {
+            let old_end=area.vpn_range.get_end();
+            area.my_shrink_to(&mut self.page_table, start.floor(),end.ceil());
+            let map_type=area.map_type;
+            let map_perm=area.map_perm;
+            debug!("un mapping right end:{:?},old end:{:?}",end,old_end);
+            self.areas.push(MapArea::new(end,old_end.into(),map_type,map_perm));
+            debug!("shrink one sucess=================================================");
+            0
+        } else {
+            debug!("start:{:?},end:{:?}",start,end);
+            -1
+        }
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
@@ -409,6 +436,8 @@ impl MapArea {
     pub fn my_map(&mut self, page_table: &mut PageTable)->isize {
         for vpn in self.vpn_range {
             let temp=self.my_map_one(page_table, vpn);
+            debug!("is maping {:?},{:?}",vpn,temp);
+            debug!("====================================");
             if temp==-1 {
                 return -1;
             }
@@ -436,13 +465,14 @@ impl MapArea {
         page_table.map(vpn, ppn, pte_flags);
         0
     }
-    pub fn my_unmmap(){
-        todo!()
-    }
+    pub fn my_shrink_to(&mut self, page_table: &mut PageTable, start:VirtPageNum, end: VirtPageNum) {
+        for vpn in VPNRange::new(start, end) {
+            debug!("is unmapping:{:?}",vpn);
+            self.unmap_one(page_table, vpn)
+        }
+        self.vpn_range = VPNRange::new(self.vpn_range.get_start(), start);
+        debug!("update MapArea left: start {:?}, end{:?}",self.vpn_range.get_start(),self.vpn_range.get_end());
 
-    ///un map one
-    pub fn my_unmapone(){
-        todo!()
     }
 
 }

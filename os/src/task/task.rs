@@ -110,7 +110,11 @@ impl TaskControlBlock {
         self.memory_set.page_table.modify_id(id,data)
     }
     pub fn get_count(&self,id:usize)-> isize{
-            *self.count.get(&id).unwrap() as isize
+            if let Some(v) =self.count.get(&id){
+               *v as isize
+            }else {
+                0
+            }
     }
     pub fn add_count(&mut self, id:usize){
             *self.count.entry(id).or_insert(0) += 1;

@@ -186,6 +186,14 @@ impl TaskManager {
         let cur = inner.current_task;
         inner.tasks[cur].memory_set.my_map(start,len,port)
     }
+    fn my_unmap(&self,start:usize,len:usize)->isize{
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        let end=start+len;
+        debug!("un map start:{:x},end:{:x},len:{:x}",start,end,len);
+        inner.tasks[cur].memory_set.my_shrink_to(start.into(),end.into())
+    }
+
 
 }
 
@@ -257,4 +265,7 @@ pub fn add_count(id:usize){
 
 pub fn my_map(start:usize,len:usize,port:usize)->isize{
     TASK_MANAGER.my_map(start,len,port)
+}
+pub fn my_unmap(start:usize,len:usize)->isize{
+    TASK_MANAGER.my_unmap(start,len)
 }
