@@ -96,7 +96,7 @@ impl PageTable {
         }
     }
     /// Find PageTableEntry by VirtPageNum, create a frame for a 4KB page table if not exist
-    fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
@@ -116,7 +116,7 @@ impl PageTable {
         result
     }
     /// Find PageTableEntry by VirtPageNum
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
@@ -155,27 +155,57 @@ impl PageTable {
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
-}
 
-/// Translate&Copy a ptr[u8] array with LENGTH len to a mutable u8 Vec through page table
-pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
-    let page_table = PageTable::from_token(token);
-    let mut start = ptr as usize;
-    let end = start + len;
-    let mut v = Vec::new();
-    while start < end {
-        let start_va = VirtAddr::from(start);
-        let mut vpn = start_va.floor();
-        let ppn = page_table.translate(vpn).unwrap().ppn();
-        vpn.step();
-        let mut end_va: VirtAddr = vpn.into();
-        end_va = end_va.min(VirtAddr::from(end));
-        if end_va.page_offset() == 0 {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
-        } else {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
-        }
-        start = end_va.into();
+    /// check
+    fn is_valid_sv39_address(id: usize) -> bool {
+        let bit_38 = (id >> 38) & 1;
+        let high_25_bits = id >> 39;
+        let expected_high_25_bits = bit_38 * 0x1FFFFFF;
+        high_25_bits == expected_high_25_bits
     }
-    v
+
+    ///my methon,through id
+    pub fn read_id(&self, id: usize) -> isize {
+        let va: VirtAddr = id.into();
+        let vpn: VirtPageNum = va.floor();
+        match self.translate(vpn) {
+            Some(pte) if pte.readable() && Self::is_valid_sv39_address(id) => pte.ppn().get_bytes_array()[va.page_offset()] as isize,
+            _ => -1,
+        }
+    }
+    ///modify
+    pub fn modify_id(&self, id: usize, data: usize) -> isize {
+        let va: VirtAddr = id.into();
+        let vpn: VirtPageNum = va.floor();
+        match self.find_pte(vpn) {
+            Some(pte) if pte.writable() && Self::is_valid_sv39_address(id)=> {
+                pte.ppn().get_bytes_array()[va.page_offset()] = data as u8;
+                0
+            },
+            _ => -1,
+        }
+    }
 }
+    /// Translate&Copy a ptr[u8] array with LENGTH len to a mutable u8 Vec through page table
+    pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
+        let page_table = PageTable::from_token(token);
+        let mut start = ptr as usize;
+        let end = start + len;
+        let mut v = Vec::new();
+        while start < end {
+            let start_va = VirtAddr::from(start);
+            let mut vpn = start_va.floor();
+            let ppn = page_table.translate(vpn).unwrap().ppn();
+            vpn.step();
+            let mut end_va: VirtAddr = vpn.into();
+            end_va = end_va.min(VirtAddr::from(end));
+            if end_va.page_offset() == 0 {
+                v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
+            } else {
+                v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
+            }
+            start = end_va.into();
+        }
+        v
+    }
+

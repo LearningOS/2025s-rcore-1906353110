@@ -18,6 +18,7 @@ use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
+// use core::future::PollFn;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -153,6 +154,39 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    /// my fn
+    ///read
+    fn read_id(&self,id:usize) -> isize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].read_id(id)
+    }
+    ///m
+    fn modify_id(&self,id:usize,data: usize)->isize{
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].modify_id(id,data)
+    }
+
+    ///get
+    fn get_current_count(&self,id:usize) -> isize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].get_count(id)
+    }
+    /// add
+    fn add_count(&self,id:usize) {
+        // let mut inner = self.inner.exclusive_access();
+        // inner.tasks[inner.current_task].add_count(id);
+
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].add_count(id)
+    }
+
+    fn my_map(&self,start:usize,len:usize,port:usize)->isize{
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].memory_set.my_map(start,len,port)
+    }
+
 }
 
 /// Run the first task in task list.
@@ -201,4 +235,26 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+///my fn
+///handle 0,read id address
+pub fn read_id(id:usize) -> isize {
+    TASK_MANAGER.read_id(id)
+}
+///m
+pub fn modify_id(id:usize,data:usize)->isize{
+    TASK_MANAGER.modify_id(id,data)
+}
+///c
+pub fn current_user_count(id:usize) -> isize {
+    TASK_MANAGER.get_current_count(id)
+}
+///a
+pub fn add_count(id:usize){
+    TASK_MANAGER.add_count(id);
+}
+
+pub fn my_map(start:usize,len:usize,port:usize)->isize{
+    TASK_MANAGER.my_map(start,len,port)
 }

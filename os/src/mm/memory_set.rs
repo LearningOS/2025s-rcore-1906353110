@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
+use crate::mm::memory_set::MapType::Framed;
 
 extern "C" {
     fn stext();
@@ -35,7 +36,9 @@ lazy_static! {
 }
 /// address space
 pub struct MemorySet {
-    page_table: PageTable,
+    ///pg
+    pub page_table: PageTable,
+    ///a
     areas: Vec<MapArea>,
 }
 
@@ -262,6 +265,51 @@ impl MemorySet {
             false
         }
     }
+
+    pub fn my_push(&mut self,mut map_area: MapArea) -> isize{
+        match map_area.my_map(&mut self.page_table){
+            0 => {
+                self.areas.push(map_area);
+                0
+            },
+            _ => -1
+        }
+    }
+    /// 等会 改掉这个
+    pub  fn my_map(&mut self,start:usize,len:usize,prot:usize)->isize{
+        0
+    }
+    // pub fn my_map(&mut self,start:usize,len:usize,prot:usize)->isize{
+    //     let va:VirtAddr=start.into();
+    //     if!va.aligned()||prot&!0x7!=0||prot&0x7==0{return -1;}
+    //     let end:VirtAddr=(start + len).into();
+    //     let ma=MapArea::new(va,end,Framed,Self::prot_to_permission(prot));
+    //     // let vpn_start:VirtPageNum = va.floor();
+    //     // let vpn_end:VirtPageNum = end.floor();
+    //     for area in self.areas{
+    //         if !(area.vpn_range.get_start()>ma.vpn_range.get_end()||area.vpn_range.get_end()<ma.vpn_range.get_start()){
+    //             return  -1;
+    //         }
+    //     }
+    //     self.my_push(ma)
+    // }
+    pub fn prot_to_permission(prot: usize) -> MapPermission {
+        let mut permissions = MapPermission::empty();
+        if prot & 1 == 1 {
+            permissions |= MapPermission::R;
+        }
+        if prot & (1 << 1) == (1 << 1) {
+            permissions |= MapPermission::W;
+        }
+        if prot & (1 << 2) == (1 << 2) {
+            permissions |= MapPermission::X;
+        }
+        permissions
+    }
+
+    pub fn my_shrink(){
+
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -356,6 +404,47 @@ impl MapArea {
             current_vpn.step();
         }
     }
+    ///wirte map and unmap can handle exception
+
+    pub fn my_map(&mut self, page_table: &mut PageTable)->isize {
+        for vpn in self.vpn_range {
+            let temp=self.my_map_one(page_table, vpn);
+            if temp==-1 {
+                return -1;
+            }
+        }
+        0
+    }
+    pub fn my_map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) -> isize {
+        let ppn: PhysPageNum;
+        match self.map_type {
+            MapType::Identical => {
+                ppn = PhysPageNum(vpn.0);
+            }
+            Framed => {
+                // let frame = frame_alloc();
+                match frame_alloc(){
+                    None => {return -1}
+                    Some(frame) => {
+                        ppn = frame.ppn;
+                        self.data_frames.insert(vpn, frame);
+                    }
+                }
+            }
+        }
+        let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
+        page_table.map(vpn, ppn, pte_flags);
+        0
+    }
+    pub fn my_unmmap(){
+        todo!()
+    }
+
+    ///un map one
+    pub fn my_unmapone(){
+        todo!()
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]

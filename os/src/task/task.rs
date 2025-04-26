@@ -1,9 +1,9 @@
 //! Types related to task management
+
+use alloc::collections::BTreeMap;
 use super::TaskContext;
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{
-    kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
-};
+use crate::mm::{kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::trap::{trap_handler, TrapContext};
 
 /// The task control block (TCB) of a task.
@@ -28,6 +28,10 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// syscall count
+    pub count:BTreeMap<usize, usize>,
+
 }
 
 impl TaskControlBlock {
@@ -39,6 +43,7 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
+
     /// Based on the elf info in program, build the contents of task in a new address space
     pub fn new(elf_data: &[u8], app_id: usize) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
@@ -63,6 +68,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            count:BTreeMap::new(),
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -95,6 +101,19 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    pub fn read_id(&self,id:usize) ->isize {
+        self.memory_set.page_table.read_id(id)
+    }
+    pub fn modify_id(&self,id:usize,data:usize)->isize{
+        self.memory_set.page_table.modify_id(id,data)
+    }
+    pub fn get_count(&self,id:usize)-> isize{
+            *self.count.get(&id).unwrap() as isize
+    }
+    pub fn add_count(&mut self, id:usize){
+            *self.count.entry(id).or_insert(0) += 1;
     }
 }
 

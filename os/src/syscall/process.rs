@@ -1,5 +1,7 @@
 //! Process management syscalls
-use crate::task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next};
+
+use crate::mm::{translated_byte_buffer};
+use crate::task::{change_program_brk, current_user_count, current_user_token, exit_current_and_run_next, modify_id, my_map, read_id, suspend_current_and_run_next};
 use crate::timer::get_time_us;
 
 #[repr(C)]
@@ -29,32 +31,44 @@ pub fn sys_yield() -> isize {
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
     let us = get_time_us();
-    println!("{}",us);
-    println!("ts:{:?}",_ts);
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
 
-    //思路1 先找到物理，然后写
-    //思路2 看一下哪个traslated_byte_buffer 深刻理解一下
+    let time_val_bytes = unsafe {
+        core::slice::from_raw_parts(
+            &time_val as *const TimeVal as *const u8,
+            core::mem::size_of::<TimeVal>(),
+        )
+    };
+
+    let buffers = translated_byte_buffer(current_user_token(), _ts as *const u8, core::mem::size_of::<TimeVal>());
+    let mut offset = 0;
+    for buffer in buffers {
+        let copy_len = core::cmp::min(buffer.len(), time_val_bytes.len() - offset);
+        buffer[0..copy_len].copy_from_slice(&time_val_bytes[offset..offset + copy_len]);
+        offset += copy_len;
+    }
     0
-    // unsafe {
-    //     *_ts = TimeVal {
-    //         sec: us / 1_000_000,
-    //         usec: us % 1_000_000,
-    //     };
-    // }
-    // 0
 }
 
 /// TODO: Finish sys_trace to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
-    -1
+    match trace_request {
+        0 => read_id(id),
+        1 => modify_id(id,data),
+        2 => current_user_count(id),
+        _ => -1,
+    }
 }
 
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    my_map(_start,_len,_port)
 }
 
 // YOUR JOB: Implement munmap.
