@@ -16,9 +16,7 @@ mod context;
 
 use crate::config::{TRAMPOLINE, TRAP_CONTEXT_BASE};
 use crate::syscall::syscall;
-use crate::task::{
-    current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
-};
+use crate::task::{current_task, current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next};
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
 use riscv::register::{
@@ -65,9 +63,11 @@ pub fn trap_handler() -> ! {
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
+            trace!("syscall {:?} UserEnvCall happen {:?}",cx.x[17],current_task().unwrap().pid);
             // get system call return value
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
             // cx is changed during sys_exec, so we have to call it again
+            trace!("{:?} in trap_handler after syscall{:?}",current_task().unwrap().pid,cx.x[17]);
             cx = current_trap_cx();
             cx.x[10] = result as usize;
         }
@@ -92,6 +92,7 @@ pub fn trap_handler() -> ! {
             exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            trace!("clock interrupt happen{:?}",current_task().unwrap().pid);
             set_next_trigger();
             suspend_current_and_run_next();
         }
@@ -113,6 +114,7 @@ pub fn trap_handler() -> ! {
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
 pub fn trap_return() -> ! {
+    trace!("{:?}is trap_return now",current_task().unwrap().pid);
     set_user_trap_entry();
     let trap_cx_ptr = TRAP_CONTEXT_BASE;
     let user_satp = current_user_token();
