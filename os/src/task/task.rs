@@ -8,6 +8,7 @@ use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
+pub const BIG_STRIDE :usize = 10000;
 
 /// Task control block structure
 ///
@@ -33,6 +34,10 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
+    }
+    pub fn get_stride(&self)->usize{
+        let inner = self.inner_exclusive_access();
+        inner.stride
     }
 }
 
@@ -68,6 +73,11 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// stride
+    pub stride :usize,
+    ///prio
+    pub prio:usize,
 }
 
 impl TaskControlBlockInner {
@@ -84,6 +94,15 @@ impl TaskControlBlockInner {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+    pub fn stride(&self)->usize{
+        self.stride
+    }
+    pub fn add_stride(&mut self){
+        self.stride += BIG_STRIDE/self.prio;
+    }
+    pub fn modify_prio(&mut self,prio:usize){
+        self.prio=prio;
     }
 }
 
@@ -118,6 +137,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: 0,
+                    prio: 16,
                 })
             },
         };
@@ -191,6 +212,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride: 0,
+                    prio: 16,
                 })
             },
         });
@@ -233,6 +256,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: 0,
+                    prio: 16,
                 })
             },
         });
