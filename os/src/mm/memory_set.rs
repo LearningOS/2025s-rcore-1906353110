@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
+use crate::mm::memory_set::MapType::Framed;
 
 extern "C" {
     fn stext();
@@ -318,6 +319,74 @@ impl MemorySet {
             false
         }
     }
+    pub fn mmap(&mut self,start:usize,len:usize,prot:usize)->isize {
+        debug!("start:{:x},end{:x}",start,start+len);
+        let va_start: VirtAddr = start.into();
+        if !va_start.aligned() || prot & !0x7 != 0 || prot & 0x7 == 0 {
+            return -1;
+        }
+        let va_end: VirtAddr = (start + len).into();
+        // for x in start..start+len {
+        //     let y:VirtPageNum = x.into();
+        //     if let Some(p) = self.page_table.translate(y) {
+        //         return -1
+        //     }
+        // }
+        let mut start =va_start.floor();
+        let end = va_end.ceil();
+        debug!("start {:?},end {:?}",start,end);
+        while start.0 < end.0 {
+            debug!("mmap Current VirtPageNum: {:x}", start.0);
+            if self.page_table.translate(start).is_some(){
+                debug!("return -1 ??? who?{:?}",start);
+                return -1;
+            }
+            start.step();
+        }
+        debug!("va_start{:?},va_end{:?}",va_start,va_end);
+        let mm=MapArea::new(va_start,va_end,Framed,Self::prot_to_permission(prot));
+        let s=mm.vpn_range.get_start();
+        let e =mm.vpn_range.get_end();
+        debug!("s{:?},e{:?}",s,e);
+        self.push(mm,None);
+        debug!("mmap ok, start should == end  start {:?}, end{:?}",start,end);
+        0
+    }
+    pub fn prot_to_permission(prot: usize) -> MapPermission {
+        let mut permissions = MapPermission::empty();
+        if prot & 1 == 1 {
+            permissions |= MapPermission::R;
+        }
+        if prot & (1 << 1) == (1 << 1) {
+            permissions |= MapPermission::W;
+        }
+        if prot & (1 << 2) == (1 << 2) {
+            permissions |= MapPermission::X;
+        }
+        permissions | MapPermission::U
+    }
+    pub fn munmap(&mut self,start:usize,len:usize)->isize{
+        let va_start: VirtAddr = start.into();
+        let va_end: VirtAddr = (start + len).into();
+        if!va_start.aligned(){
+            debug!("aligned start:{:?},end:{:?}",va_start,va_end);
+            return -1;
+        }
+        let mut start = va_start.floor();
+        let end=va_end.ceil();
+        debug!("start VPN{:?},end VPN{:?}",start,end);
+        while start.0 < end.0 {
+            debug!("munmap Current VirtPageNum: {:x}", start.0);
+            if self.page_table.translate(start).is_none(){
+                return -1;
+            }
+            start.step();
+        }
+        self.remove_area_with_start_vpn(va_start.floor());
+        0
+    }
+
+
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

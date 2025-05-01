@@ -10,7 +10,8 @@ use crate::{
         suspend_current_and_run_next,
     },
 };
-
+use crate::mm::translated_byte_buffer;
+use crate::timer::get_time_us;
 #[repr(C)]
 #[derive(Debug)]
 pub struct TimeVal {
@@ -110,7 +111,26 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let us = get_time_us();
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+
+    let time_val_bytes = unsafe {
+        core::slice::from_raw_parts(
+            &time_val as *const TimeVal as *const u8,
+            core::mem::size_of::<TimeVal>(),
+        )
+    };
+    let buffers = translated_byte_buffer(current_user_token(), _ts as *const u8, core::mem::size_of::<TimeVal>());
+    let mut offset = 0;
+    for buffer in buffers {
+        let copy_len = core::cmp::min(buffer.len(), time_val_bytes.len() - offset);
+        buffer[0..copy_len].copy_from_slice(&time_val_bytes[offset..offset + copy_len]);
+        offset += copy_len;
+    }
+    0
 }
 
 /// YOUR JOB: Implement mmap.
@@ -119,7 +139,8 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    debug!("map token{:x}",current_user_token());
+    current_task().unwrap().inner_exclusive_access().memory_set.mmap(_start,_len,_port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -128,7 +149,7 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    current_task().unwrap().inner_exclusive_access().memory_set.munmap(_start,_len)
 }
 
 /// change data segment size
@@ -148,7 +169,19 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+     if let Some(data) = get_app_data_by_name(path.as_str()) {
+         let task = current_task().unwrap();
+         let new_task = task.spawn(data);
+         // warn!("kernel:{:?} is by sys_spawn created", new_task.pid);
+         // add new task to scheduler
+         let pid = new_task.pid.0 as isize;
+         add_task(new_task);
+         pid
+     } else {
+         -1
+     }
 }
 
 // YOUR JOB: Set task priority.
@@ -157,5 +190,9 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    if _prio<2 {return -1};
+    let binding =current_task().unwrap();
+    let mut inner = binding.inner_exclusive_access();
+    inner.modify_prio(_prio as usize);
+    _prio
 }

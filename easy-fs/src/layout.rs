@@ -10,16 +10,16 @@ const INODE_DIRECT_COUNT: usize = 28;
 /// The max length of inode name
 const NAME_LENGTH_LIMIT: usize = 27;
 /// The max number of indirect1 inodes
-const INODE_INDIRECT1_COUNT: usize = BLOCK_SZ / 4;
+const INODE_INDIRECT1_COUNT: usize = BLOCK_SZ / 4; //512 / 4  = 128 = 2^7
 /// The max number of indirect2 inodes
-const INODE_INDIRECT2_COUNT: usize = INODE_INDIRECT1_COUNT * INODE_INDIRECT1_COUNT;
+const INODE_INDIRECT2_COUNT: usize = INODE_INDIRECT1_COUNT * INODE_INDIRECT1_COUNT; //128 * 128
 /// The upper bound of direct inode index
-const DIRECT_BOUND: usize = INODE_DIRECT_COUNT;
+const DIRECT_BOUND: usize = INODE_DIRECT_COUNT;// 28
 /// The upper bound of indirect1 inode index
-const INDIRECT1_BOUND: usize = DIRECT_BOUND + INODE_INDIRECT1_COUNT;
+const INDIRECT1_BOUND: usize = DIRECT_BOUND + INODE_INDIRECT1_COUNT; // 28 + 128 = 156
 /// The upper bound of indirect2 inode indexs
 #[allow(unused)]
-const INDIRECT2_BOUND: usize = INDIRECT1_BOUND + INODE_INDIRECT2_COUNT;
+const INDIRECT2_BOUND: usize = INDIRECT1_BOUND + INODE_INDIRECT2_COUNT; // 156 + 16384 = 16540
 /// Super block of a filesystem
 #[repr(C)]
 pub struct SuperBlock {
@@ -81,7 +81,7 @@ type DataBlock = [u8; BLOCK_SZ];
 /// A disk inode
 #[repr(C)]
 pub struct DiskInode {
-    pub size: u32,
+    pub size: u32,// file/dir bytes
     pub direct: [u32; INODE_DIRECT_COUNT],
     pub indirect1: u32,
     pub indirect2: u32,
@@ -393,7 +393,7 @@ impl DiskInode {
 pub struct DirEntry {
     name: [u8; NAME_LENGTH_LIMIT + 1],
     inode_id: u32,
-}
+}//28+4=32 thus DIRENT_SZ=32
 /// Size of a directory entry
 pub const DIRENT_SZ: usize = 32;
 
