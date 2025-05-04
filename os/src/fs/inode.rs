@@ -20,12 +20,12 @@ use lazy_static::*;
 pub struct OSInode {
     readable: bool,
     writable: bool,
-    inner: UPSafeCell<OSInodeInner>,
+    pub inner: UPSafeCell<OSInodeInner>,
 }
 /// The OS inode inner in 'UPSafeCell'
 pub struct OSInodeInner {
     offset: usize,
-    inode: Arc<Inode>,
+    pub inode: Arc<Inode>,
 }
 
 impl OSInode {
@@ -53,6 +53,8 @@ impl OSInode {
         }
         v
     }
+
+
 }
 
 lazy_static! {
@@ -61,7 +63,6 @@ lazy_static! {
         Arc::new(EasyFileSystem::root_inode(&efs))
     };
 }
-
 /// List all apps in the root directory
 pub fn list_apps() {
     println!("/**** APPS ****");
@@ -70,6 +71,14 @@ pub fn list_apps() {
     }
     println!("**************/");
 }
+
+///find all blocks positions
+pub fn find_all_inode_mes() -> Vec<(u32,(u32,usize))>{
+    let v =ROOT_INODE.find_all_inode_id();
+    let p=ROOT_INODE.find_all_block_positions(v.clone());
+    p
+}
+
 
 bitflags! {
     ///  The flags argument to the open() system call is constructed by ORing together zero or more of the following values:
@@ -124,7 +133,17 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
         })
     }
 }
+/// link
+pub fn link(oldname:&str,newname:&str) -> isize{
+    if let Some(inode_id) = ROOT_INODE.find_id_by_name(oldname){
+        ROOT_INODE.create_and_append_dir_entry(newname,inode_id);
+        0
+    }else { -1 }
+}
 
+pub fn unlink(name:&str) -> isize{
+    ROOT_INODE.delete_dir_entry(name)
+}
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable

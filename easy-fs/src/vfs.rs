@@ -6,10 +6,11 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
+
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
-    block_id: usize,
-    block_offset: usize,
+    pub block_id: usize,
+    pub block_offset: usize,
     fs: Arc<Mutex<EasyFileSystem>>,
     block_device: Arc<dyn BlockDevice>,
 }
@@ -153,6 +154,115 @@ impl Inode {
                 v.push(String::from(dirent.name()));
             }
             v
+        })
+    }
+    ///find all,only root_inode can use
+    pub fn find_all_inode_id(&self) -> Vec<u32> {
+        let _fs = self.fs.lock();
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut ids: Vec<u32> = Vec::new();
+            ids.push(0);
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                assert_eq!(
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device),
+                    DIRENT_SZ
+                );
+                ids.push(dirent.inode_id());
+            }
+            return ids;
+        })
+    }
+    /// find all positions, positions and inode_id one to one
+    pub fn find_all_block_positions(&self,inode_ids:Vec<u32>) -> Vec<(u32,(u32, usize))> {
+        let mut positions: Vec<(u32,(u32, usize))> = Vec::new();
+        let fs = self.fs.lock();
+        for inode_id in inode_ids {
+            let pos = fs.get_disk_inode_pos(inode_id);
+            positions.push((inode_id,pos));
+        }
+        positions
+    }
+    ///find_all_dir_entries
+    pub fn find_all_dir_entries(&self) -> Vec<DirEntry> {
+        let _fs = self.fs.lock();
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut entries: Vec<DirEntry> = Vec::new();
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                assert_eq!(
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device),
+                    DIRENT_SZ
+                );
+                entries.push(dirent);
+            }
+            entries
+        })
+    }
+    ///append dir,link
+    pub fn create_and_append_dir_entry(&self, name: &str, inode_id: u32) {
+        let new_entry = DirEntry::new(name, inode_id);
+        let entries = self.find_all_dir_entries();
+        let offset = entries.len() * DIRENT_SZ;
+        self.write_dir_entry_at_offset(offset, &new_entry);
+    }
+    // pub fn delete_dir_entry(&self, name: &str) -> isize{
+    //     let mut entries = self.find_all_dir_entries();
+    //     if let Some(index) = entries.iter().position(|entry| entry.name() == name) {
+    //         entries.remove(index);
+    //         self.write_all_dir_entries(&entries);
+    //         0
+    //     }else { -1 }
+    // }
+    // pub fn delete_dir_entry(&self, name: &str) -> isize {
+    //     let mut entries = self.find_all_dir_entries();
+    //     if let Some(index) = entries.iter_mut().position(|entry| entry.name() == name) {
+    //         // 将 name 设为全 0
+    //         entries[index].name = [0u8; 28];
+    //         // 将 inode_id 设为 u32::MAX
+    //         entries[index].inode_id = u32::MAX;
+    //         self.write_all_dir_entries(&entries);
+    //         0
+    //     } else {
+    //         -1
+    //     }
+    // }
+    //
+    /// wirte all dir
+    pub fn write_all_dir_entries(&self, entries: &[DirEntry]) {
+        for (i, entry) in entries.iter().enumerate() {
+            let offset = i * DIRENT_SZ;
+            self.write_at(offset, entry.as_bytes());
+        }
+
+    }
+
+    pub fn delete_dir_entry(&self, name: &str) -> isize {
+        let mut entries = self.find_all_dir_entries();
+        if let Some(index) = entries.iter_mut().position(|entry| entry.name() == name) {
+            // 将 name 设为全 0
+            entries[index].name = [0u8; 28];
+            // 将 inode_id 设为 u32::MAX
+            entries[index].inode_id = u32::MAX;
+            // 计算要删除的目录项的偏移
+            let offset = index * DIRENT_SZ;
+            // 只更新该偏移处的目录项
+            self.write_dir_entry_at_offset(offset, &entries[index]);
+            0
+        } else {
+            -1
+        }
+    }
+    pub fn write_dir_entry_at_offset(&self, offset: usize, entry: &DirEntry) {
+        self.write_at(offset, entry.as_bytes());
+    }
+
+    /// find id by name
+    pub fn find_id_by_name(&self, name: &str) -> Option<u32> {
+        self.read_disk_inode(|disk_inode| {
+            self.find_inode_id(name, disk_inode)
         })
     }
     /// Read data from current inode

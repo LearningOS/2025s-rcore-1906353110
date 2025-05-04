@@ -81,12 +81,12 @@ type DataBlock = [u8; BLOCK_SZ];
 /// A disk inode
 #[repr(C)]
 pub struct DiskInode {
-    pub size: u32,// file/dir bytes
+    pub size: u32,// file/dir bytes  //4B
     pub direct: [u32; INODE_DIRECT_COUNT],
     pub indirect1: u32,
     pub indirect2: u32,
     type_: DiskInodeType,
-}
+}//4+112+4+4+4=128B
 
 impl DiskInode {
     /// Initialize a disk inode, as well as all direct inodes under it
@@ -391,8 +391,8 @@ impl DiskInode {
 /// A directory entry
 #[repr(C)]
 pub struct DirEntry {
-    name: [u8; NAME_LENGTH_LIMIT + 1],
-    inode_id: u32,
+   pub name: [u8; NAME_LENGTH_LIMIT + 1],
+   pub inode_id: u32,
 }//28+4=32 thus DIRENT_SZ=32
 /// Size of a directory entry
 pub const DIRENT_SZ: usize = 32;
